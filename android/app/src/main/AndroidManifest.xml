@@ -27,6 +27,7 @@
         <category android:name="android.intent.category.BROWSABLE"/>
         <data android:scheme="quickbite"/>
         <data android:scheme="com.quickbite.app"/>
+        <data android:scheme="exp+quickbite"/>
       </intent-filter>
     </activity>
   </application>
