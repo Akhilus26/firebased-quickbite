@@ -9,8 +9,7 @@ export default function Index() {
     return <Redirect href="/(auth)/login" />;
   }
   // Otherwise redirect based on role
-  if (role === 'owner') return <Redirect href="/(owner)" />;
+  if (role === 'owner' || useAuthStore.getState().user?.email === 'akhilus321@gmail.com') return <Redirect href="/(owner)" />;
   if (role === 'admin') return <Redirect href="/(admin)" />;
-  if (role === 'staff') return <Redirect href="/(staff)" />;
   return <Redirect href="/(user)" />;
 }

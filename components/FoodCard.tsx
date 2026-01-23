@@ -16,6 +16,7 @@ export type MenuItem = {
   protein?: number;
   prepTime?: number; // minutes
   quantity?: number; // default serving quantity or stock quantity
+  counter: 'Snacks & Hot Beverages' | 'Meals' | 'Cold Beverages';
 };
 
 export function FoodCard({ item, disabled }: { item: MenuItem; disabled?: boolean }) {
@@ -40,17 +41,17 @@ export function FoodCard({ item, disabled }: { item: MenuItem; disabled?: boolea
 
   return (
     <Animated.View style={{ transform: [{ scale }], opacity: fadeIn }}>
-      <Pressable 
+      <Pressable
         onPress={handlePress}
         onPressIn={pressIn}
         onPressOut={pressOut}
         disabled={item.available === false}
->
+      >
         <View style={styles.card}>
           <View style={styles.imageWrap}>
-            <Image 
-              source={typeof item.image === 'number' ? item.image : { uri: item.image || 'https://via.placeholder.com/300' }} 
-              style={styles.image} 
+            <Image
+              source={typeof item.image === 'number' ? item.image : { uri: item.image || 'https://via.placeholder.com/300' }}
+              style={styles.image}
             />
             {(item.available === false || disabled) && (
               <View style={styles.soldOutOverlay}>

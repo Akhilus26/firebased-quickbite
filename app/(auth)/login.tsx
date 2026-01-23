@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, ImageBackground, KeyboardAvoidingView, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ImageBackground, KeyboardAvoidingView, Platform, Alert, TextInput, ScrollView, ActivityIndicator } from 'react-native';
 import { useAuthStore } from '@/stores/authStore';
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import SplashScreen from '@/components/SplashScreen';
 import * as Google from 'expo-auth-session/providers/google';
 import * as WebBrowser from 'expo-web-browser';
-import { signInWithCredential, GoogleAuthProvider } from 'firebase/auth';
+import { signInWithCredential, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '@/config/firebase';
-import { getFirestore, doc, getDoc } from 'firebase/firestore'; // Added imports
+import { getFirestore, doc, getDoc } from 'firebase/firestore';
 
 const db = getFirestore();
 
@@ -23,10 +23,16 @@ const GOOGLE_WEB_CLIENT_ID = '91948169284-t3i0a3fv9e42e9h1hstgjt1dn04f2554.apps.
 const GOOGLE_ANDROID_CLIENT_ID = '91948169284-hdgsvfjrm72volmukooqu6nr772t3r2o.apps.googleusercontent.com';
 
 export default function Login() {
-  const [role, setRole] = useState<'user' | 'owner' | 'admin' | 'staff'>('user');
+  const [role, setRole] = useState<'user' | 'owner' | 'admin'>('user');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
   const [isGoogleSigningIn, setIsGoogleSigningIn] = useState(false);
-  const login = useAuthStore((s) => s.login);
+  const [isEmailLoading, setIsEmailLoading] = useState(false);
+  const [isSignup, setIsSignup] = useState(false);
+
+  // Email/Password states
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
   const setGoogleUser = useAuthStore((s) => s.setGoogleUser);
 
   // Google authentication hook
@@ -37,48 +43,48 @@ export default function Login() {
   });
 
   // Handle Google sign-in with Firebase
-  // Handle Google sign-in with Firebase
   const handleGoogleSignIn = useCallback(async (idToken: string | null, accessToken: string | null) => {
-    console.log('handleGoogleSignIn called');
     try {
       if (!idToken && !accessToken) {
         throw new Error('No tokens provided');
       }
 
-      // Create credential using whichever token we have
       let credential;
       if (idToken) {
-        console.log('Using idToken for credential');
         credential = GoogleAuthProvider.credential(idToken);
       } else {
-        console.log('Using accessToken for credential');
         credential = GoogleAuthProvider.credential(null, accessToken);
       }
 
-      console.log('Credential created, signing in with Firebase...');
       const userCredential = await signInWithCredential(auth, credential);
       const user = userCredential.user;
-      console.log('Firebase Sign-In Success! User:', user.uid);
 
-      // Check if user exists in Firestore
+      // Special check for owner email
+      if (user.email === 'akhilus321@gmail.com') {
+        const setGoogleUser = useAuthStore.getState().setGoogleUser;
+        // The store currently hardcodes 'user' role in setGoogleUser. 
+        // I might need to update the store or manually override here.
+        // For now, I'll follow the flow.
+        await setGoogleUser(user);
+        // Manually update role in store for owner
+        useAuthStore.setState({ role: 'owner' });
+        router.replace('/(owner)');
+        return;
+      }
+
       const userDocRef = doc(db, 'users', user.uid);
       const userDoc = await getDoc(userDocRef);
-      console.log('Firestore User Doc exists:', userDoc.exists());
 
       if (userDoc.exists()) {
-        console.log('Redirecting to home...');
         await setGoogleUser(user);
         router.replace('/');
       } else {
-        console.log('Redirecting to complete profile...');
         await setGoogleUser(user);
         router.replace('/(auth)/complete-profile');
       }
 
     } catch (error: any) {
       console.error('Google sign-in error:', error);
-      console.error('Error Code:', error.code);
-      console.error('Error Message:', error.message);
       Alert.alert(
         'Sign In Error',
         error.message || 'Failed to sign in with Google. Please try again.'
@@ -89,42 +95,71 @@ export default function Login() {
 
   // Handle Google OAuth response
   useEffect(() => {
-    console.log('OAuth Response changed:', response?.type);
-
-    // Log details safely based on type
-    if (response?.type === 'success') {
-      console.log('Response params:', JSON.stringify(response.params));
-    } else if (response?.type === 'error') {
-      console.log('Response error:', JSON.stringify(response.error));
-    }
-
     if (response?.type === 'success') {
       const { id_token, access_token } = response.params;
       if (id_token || access_token) {
-        console.log('Success response received. calling handleGoogleSignIn...');
         handleGoogleSignIn(id_token || null, access_token || null);
       } else {
-        console.error('Success response received BUT both id_token and access_token are missing!');
         setIsGoogleSigningIn(false);
       }
     } else if (response?.type === 'error') {
       const errorMessage = response.error?.message || 'Google sign-in failed';
-      console.error('OAuth Error Response:', errorMessage);
       Alert.alert('Sign In Error', errorMessage);
       setIsGoogleSigningIn(false);
     } else if (response?.type === 'cancel') {
-      console.log('OAuth Cancelled');
       setIsGoogleSigningIn(false);
     }
   }, [response, handleGoogleSignIn]);
 
-  const onLogin = async () => {
-    setIsLoggingIn(true);
-    // Simulate loading delay to show splash screen
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    await login({ phone: 'default', role });
-    router.replace('/');
-    // setIsLoggingIn(false); // No need to set false as we are navigating away
+  const onEmailAuth = async () => {
+    if (!email || !password) {
+      Alert.alert('Required', 'Please enter both email and password.');
+      return;
+    }
+
+    try {
+      setIsEmailLoading(true);
+      if (isSignup) {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        if (user.email === 'akhilus321@gmail.com') {
+          await setGoogleUser(user);
+          useAuthStore.setState({ role: 'owner' });
+          router.replace('/(owner)');
+          return;
+        }
+
+        await setGoogleUser(user);
+        router.replace('/(auth)/complete-profile');
+      } else {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+
+        if (user.email === 'akhilus321@gmail.com') {
+          await setGoogleUser(user);
+          useAuthStore.setState({ role: 'owner' });
+          router.replace('/(owner)');
+          return;
+        }
+
+        const userDocRef = doc(db, 'users', user.uid);
+        const userDoc = await getDoc(userDocRef);
+
+        if (userDoc.exists()) {
+          await setGoogleUser(user);
+          router.replace('/');
+        } else {
+          await setGoogleUser(user);
+          router.replace('/(auth)/complete-profile');
+        }
+      }
+    } catch (error: any) {
+      console.error('Email Auth Error:', error);
+      Alert.alert('Authentication Failed', error.message);
+    } finally {
+      setIsEmailLoading(false);
+    }
   };
 
   const onGoogleSignIn = async () => {
@@ -140,16 +175,8 @@ export default function Login() {
     }
   };
 
-  const roleConfig = {
-    user: { label: 'Customer', icon: 'person-outline', color: ORANGE },
-    owner: { label: 'Owner', icon: 'restaurant-outline', color: '#2563eb' },
-    admin: { label: 'Admin', icon: 'shield-outline', color: '#7c3aed' },
-    staff: { label: 'Staff', icon: 'people-outline', color: GREEN },
-  };
-
   return (
     <>
-      {isLoggingIn && <SplashScreen duration={0} />}
       <ImageBackground
         source={require('../../design/background image.jpeg')}
         style={styles.container}
@@ -159,93 +186,103 @@ export default function Login() {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           style={styles.keyboardView}
         >
-          <View style={styles.content}>
-            {/* Logo/Header Section */}
-            <View style={styles.headerSection}>
-              <View style={styles.logoContainer}>
-                <Ionicons name="restaurant" size={64} color={ORANGE} />
+          <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+            <View style={styles.content}>
+              {/* Logo/Header Section */}
+              <View style={styles.headerSection}>
+                <View style={styles.logoContainer}>
+                  <Ionicons name="restaurant" size={64} color={ORANGE} />
+                </View>
+                <Text style={styles.appTitle}>QuickBite</Text>
+                <Text style={styles.appSubtitle}>Delicious food, delivered fast</Text>
               </View>
-              <Text style={styles.appTitle}>QuickBite</Text>
-              <Text style={styles.appSubtitle}>Delicious food, delivered fast</Text>
-            </View>
 
-            {/* Login Card */}
-            <View style={styles.card}>
-              <Text style={styles.welcomeText}>Welcome!</Text>
-              <Text style={styles.instructionText}>Sign in with Google or continue as guest</Text>
-
-              {/* Google Sign In Button */}
-              <Pressable
-                onPress={onGoogleSignIn}
-                disabled={isGoogleSigningIn || !request}
-                style={({ pressed }) => [
-                  styles.googleButton,
-                  pressed && styles.googleButtonPressed,
-                  (isGoogleSigningIn || !request) && styles.googleButtonDisabled
-                ]}
-              >
-                <Ionicons name="logo-google" size={20} color="#fff" />
-                <Text style={styles.googleButtonText}>
-                  {isGoogleSigningIn ? 'Signing in...' : 'Continue with Google'}
+              {/* Login/Signup Card */}
+              <View style={styles.card}>
+                <Text style={styles.welcomeText}>{isSignup ? 'Create Account' : 'Welcome Back!'}</Text>
+                <Text style={styles.instructionText}>
+                  {isSignup ? 'Sign up to get started' : 'Sign in to your account'}
                 </Text>
-              </Pressable>
 
-              {/* Divider */}
-              <View style={styles.dividerContainer}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.dividerText}>OR</Text>
-                <View style={styles.dividerLine} />
+                {/* Email/Password Inputs */}
+                <View style={styles.inputGroup}>
+                  <View style={styles.inputWrapper}>
+                    <Ionicons name="mail-outline" size={20} color="#6b7280" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Email Address"
+                      value={email}
+                      onChangeText={setEmail}
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                    />
+                  </View>
+                  <View style={styles.inputWrapper}>
+                    <Ionicons name="lock-closed-outline" size={20} color="#6b7280" style={styles.inputIcon} />
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Password"
+                      value={password}
+                      onChangeText={setPassword}
+                      secureTextEntry
+                    />
+                  </View>
+                </View>
+
+                {/* Auth Button */}
+                <Pressable
+                  onPress={onEmailAuth}
+                  disabled={isEmailLoading}
+                  style={({ pressed }) => [
+                    styles.authButton,
+                    pressed && styles.authButtonPressed,
+                    isEmailLoading && styles.authButtonDisabled
+                  ]}
+                >
+                  {isEmailLoading ? (
+                    <ActivityIndicator color="#fff" />
+                  ) : (
+                    <Text style={styles.authButtonText}>{isSignup ? 'Sign Up' : 'Sign In'}</Text>
+                  )}
+                </Pressable>
+
+                {/* Toggle Signup/Login */}
+                <Pressable onPress={() => setIsSignup(!isSignup)} style={styles.toggleContainer}>
+                  <Text style={styles.toggleText}>
+                    {isSignup ? 'Already have an account? ' : "Don't have an account? "}
+                    <Text style={styles.toggleTextHighlight}>{isSignup ? 'Sign In' : 'Sign Up'}</Text>
+                  </Text>
+                </Pressable>
+
+                {/* Divider */}
+                <View style={styles.dividerContainer}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>OR</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+
+                {/* Google Sign In Button */}
+                <Pressable
+                  onPress={onGoogleSignIn}
+                  disabled={isGoogleSigningIn || !request}
+                  style={({ pressed }) => [
+                    styles.googleButton,
+                    pressed && styles.googleButtonPressed,
+                    (isGoogleSigningIn || !request) && styles.googleButtonDisabled
+                  ]}
+                >
+                  <Ionicons name="logo-google" size={20} color="#fff" />
+                  <Text style={styles.googleButtonText}>
+                    {isGoogleSigningIn ? 'Signing in...' : 'Continue with Google'}
+                  </Text>
+                </Pressable>
+
+                <Text style={styles.hint}>
+                  By continuing, you agree to our Terms of Service and Privacy Policy.
+                </Text>
               </View>
-
-              <Text style={styles.instructionText}>Select your role to continue as guest</Text>
-
-              {/* Role Selection */}
-              <View style={styles.roleContainer}>
-                {(['user', 'owner', 'admin', 'staff'] as const).map(r => {
-                  const config = roleConfig[r];
-                  const isActive = role === r;
-                  return (
-                    <Pressable
-                      key={r}
-                      onPress={() => setRole(r)}
-                      style={[
-                        styles.roleCard,
-                        isActive && { backgroundColor: config.color, borderColor: config.color }
-                      ]}
-                    >
-                      <Ionicons
-                        name={config.icon as any}
-                        size={24}
-                        color={isActive ? '#fff' : config.color}
-                      />
-                      <Text style={[
-                        styles.roleText,
-                        isActive && styles.roleTextActive
-                      ]}>
-                        {config.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              {/* Continue Button */}
-              <Pressable
-                onPress={onLogin}
-                style={({ pressed }) => [
-                  styles.continueButton,
-                  pressed && styles.continueButtonPressed
-                ]}
-              >
-                <Text style={styles.continueButtonText}>Continue</Text>
-                <Ionicons name="arrow-forward" size={20} color="#fff" />
-              </Pressable>
-
-              <Text style={styles.hint}>
-                Guest browsing available. Login required at checkout.
-              </Text>
             </View>
-          </View>
+          </ScrollView>
         </KeyboardAvoidingView>
       </ImageBackground>
     </>
@@ -259,19 +296,22 @@ const styles = StyleSheet.create({
   keyboardView: {
     flex: 1,
   },
-  content: {
-    flex: 1,
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
-    padding: 20,
+    paddingVertical: 40,
+  },
+  content: {
+    paddingHorizontal: 20,
   },
   headerSection: {
     alignItems: 'center',
     marginBottom: 32,
   },
   logoContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 100,
+    height: 100,
+    borderRadius: 50,
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -283,29 +323,32 @@ const styles = StyleSheet.create({
     elevation: 10,
   },
   appTitle: {
-    fontSize: 36,
+    fontSize: 32,
     fontWeight: '900',
-    color: '#111827',
-    marginBottom: 8,
+    color: '#fff',
+    marginBottom: 4,
     letterSpacing: 1,
+    textShadowColor: 'rgba(0,0,0,0.3)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 5,
   },
   appSubtitle: {
-    fontSize: 16,
-    color: '#6b7280',
+    fontSize: 14,
+    color: '#f3f4f6',
     fontWeight: '600',
   },
   card: {
     backgroundColor: 'rgba(255, 255, 255, 0.95)',
-    borderRadius: 24,
+    borderRadius: 30,
     padding: 24,
     shadowColor: '#000',
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.2,
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 10 },
     elevation: 10,
   },
   welcomeText: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: '800',
     color: '#111827',
     marginBottom: 8,
@@ -318,42 +361,33 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     fontWeight: '600',
   },
-  roleContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  inputGroup: {
     gap: 12,
-    marginBottom: 24,
+    marginBottom: 20,
   },
-  roleCard: {
-    flex: 1,
-    minWidth: '45%',
+  inputWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
+    backgroundColor: '#f3f4f6',
     borderRadius: 16,
-    borderWidth: 2,
+    paddingHorizontal: 16,
+    borderWidth: 1,
     borderColor: '#e5e7eb',
-    backgroundColor: '#f9fafb',
   },
-  roleText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#374151',
+  inputIcon: {
+    marginRight: 10,
   },
-  roleTextActive: {
-    color: '#fff',
+  input: {
+    flex: 1,
+    paddingVertical: 14,
+    fontSize: 16,
+    color: '#1f2937',
   },
-  continueButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
+  authButton: {
     backgroundColor: ORANGE,
-    paddingVertical: 18,
+    paddingVertical: 16,
     borderRadius: 16,
+    alignItems: 'center',
     marginBottom: 16,
     shadowColor: ORANGE,
     shadowOpacity: 0.3,
@@ -361,50 +395,35 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     elevation: 5,
   },
-  continueButtonPressed: {
+  authButtonPressed: {
     opacity: 0.9,
+    transform: [{ scale: 0.98 }],
   },
-  continueButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: '800',
-  },
-  hint: {
-    fontSize: 12,
-    color: '#9ca3af',
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  googleButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 12,
-    backgroundColor: '#4285F4',
-    paddingVertical: 16,
-    borderRadius: 16,
-    marginBottom: 24,
-    shadowColor: '#4285F4',
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
-  },
-  googleButtonPressed: {
-    opacity: 0.9,
-  },
-  googleButtonDisabled: {
+  authButtonDisabled: {
     opacity: 0.6,
   },
-  googleButtonText: {
+  authButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '700',
+  },
+  toggleContainer: {
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  toggleText: {
+    fontSize: 14,
+    color: '#6b7280',
+    fontWeight: '600',
+  },
+  toggleTextHighlight: {
+    color: ORANGE,
+    fontWeight: '800',
   },
   dividerContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 24,
+    marginVertical: 20,
   },
   dividerLine: {
     flex: 1,
@@ -416,5 +435,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#9ca3af',
     fontWeight: '600',
+  },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    backgroundColor: '#4285F4',
+    paddingVertical: 16,
+    borderRadius: 16,
+    marginBottom: 20,
+    shadowColor: '#4285F4',
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 5,
+  },
+  googleButtonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.98 }],
+  },
+  googleButtonDisabled: {
+    opacity: 0.6,
+  },
+  googleButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  hint: {
+    fontSize: 12,
+    color: '#9ca3af',
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });

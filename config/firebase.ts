@@ -1,7 +1,8 @@
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
+import { initializeApp, getApp, getApps } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
+import { getAuth, initializeAuth, getReactNativePersistence, Auth } from "firebase/auth";
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
@@ -14,12 +15,25 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase
-const app = initializeApp(firebaseConfig);
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 // Initialize Firestore
 export const db = getFirestore(app);
 
-// Initialize Auth
-// Note: Using getAuth for now. We'll add AsyncStorage persistence later
-// This will show a warning but the app will work. Auth state persists via SecureStore in authStore.ts
-export const auth = getAuth(app);
+// Initialize Auth with persistence for native platforms
+let authInstance: Auth;
+
+if (Platform.OS === 'web') {
+  authInstance = getAuth(app);
+} else {
+  try {
+    authInstance = initializeAuth(app, {
+      persistence: getReactNativePersistence(AsyncStorage)
+    });
+  } catch (error: any) {
+    // If already initialized, just get the existing instance
+    authInstance = getAuth(app);
+  }
+}
+
+export const auth = authInstance;

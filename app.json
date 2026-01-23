@@ -8,26 +8,13 @@
     "plugins": [
       "expo-router",
       "expo-asset",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-web-browser",
+      "expo-font"
     ],
     "experiments": {
       "typedRoutes": true
     },
-    "android": {
-      "package": "com.quickbite.app",
-      "newArchEnabled": true
-    },
-    "ios": {
-      "bundleIdentifier": "com.quickbite.app",
-      "newArchEnabled": true
-    },
-    "extra": {
-      "router": {
-        "origin": false
-      },
-      "eas": {
-        "projectId": "17c8a44a-3a4a-4d59-82c5-629f87879b4b"
-      }
-    }
+    "newArchEnabled": true
   }
 }

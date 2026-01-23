@@ -25,7 +25,7 @@ function CategoryTile({
 }) {
   const scale = React.useRef(new (require('react-native').Animated).Value(1)).current;
   const Animated = require('react-native').Animated;
-  
+
   React.useEffect(() => {
     Animated.timing(scale, { toValue: isActive ? 1 : 0.96, duration: 180, useNativeDriver: true }).start();
   }, [isActive]);
@@ -55,10 +55,11 @@ export default function Home() {
   const open = useCanteenStore((s) => s.open);
   const setOpen = useCanteenStore((s) => s.setOpen);
   const role = useAuthStore((s) => s.role);
-  const isOwner = role === 'owner';
-  const { data: statusData } = useQuery({ 
-    queryKey: ['canteen:status:public'], 
-    queryFn: getCanteenStatus, 
+  const user = useAuthStore((s) => s.user);
+  const isOwner = role === 'owner' || user?.email === 'akhilus321@gmail.com';
+  const { data: statusData } = useQuery({
+    queryKey: ['canteen:status:public'],
+    queryFn: getCanteenStatus,
     refetchInterval: 2000 // Poll every 2 seconds for faster updates
   });
   React.useEffect(() => {
@@ -87,84 +88,84 @@ export default function Home() {
 
   return (
     <>
-      <ImageBackground 
-        source={require('../../design/background image.jpeg')} 
+      <ImageBackground
+        source={require('../../design/background image.jpeg')}
         style={styles.container}
         blurRadius={8}
       >
-       <View style={{ flex: 1, backgroundColor: open ? 'transparent' : 'rgba(0,0,0,0.75)' }}>
-         <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
-          {/* Header */}
-          <View style={styles.header}>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.brand}>Quick Bite</Text>
-                  <Text style={styles.tagline}>Fresh & Fast from Your Canteen</Text>
-                  <View style={styles.location}>
-                    <Text style={styles.pin}>📍</Text>
-                    <Text style={styles.locationText}>Campus Canteen</Text>
+        <View style={{ flex: 1, backgroundColor: open ? 'transparent' : 'rgba(0,0,0,0.75)' }}>
+          <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+            {/* Header */}
+            <View style={styles.header}>
+              <View style={{ flex: 1 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.brand}>Quick Bite</Text>
+                    <Text style={styles.tagline}>Fresh & Fast from Your Canteen</Text>
+                    <View style={styles.location}>
+                      <Text style={styles.pin}>📍</Text>
+                      <Text style={styles.locationText}>Campus Canteen</Text>
+                    </View>
                   </View>
+                  {isOwner && (
+                    <TouchableOpacity
+                      onPress={() => router.push('/(owner)')}
+                      style={styles.ownerBackBtn}
+                    >
+                      <Ionicons name="arrow-back" size={16} color="#fff" />
+                      {/* <Text style={styles.ownerBackText}>Back to Owner Dashboard</Text> */}
+                    </TouchableOpacity>
+                  )}
                 </View>
-                {isOwner && (
-                  <TouchableOpacity 
-                    onPress={() => router.push('/(owner)')} 
-                    style={styles.ownerBackBtn}
-                  >
-                    <Ionicons name="arrow-back" size={16} color="#fff" />
-                    <Text style={styles.ownerBackText}>Back to Owner Dashboard</Text>
-                  </TouchableOpacity>
-                )}
               </View>
             </View>
-          </View>
 
-          {/* Status Banner */}
-          <View style={[styles.statusBanner, { backgroundColor: open ? ORANGE : '#111827' }]}>
-            <Text style={[styles.statusCheck, { color: '#fff' }]}>✓</Text>
-            <Text style={[styles.statusText, { color: '#fff' }]}>{open ? 'Canteen is Open • Avg Prep Time: 12 mins' : 'Canteen is Closed'}</Text>
-            <Text style={[styles.statusDots, { color: '#fff' }]}>⋯</Text>
-          </View>
+            {/* Status Banner */}
+            <View style={[styles.statusBanner, { backgroundColor: open ? ORANGE : '#111827' }]}>
+              <Text style={[styles.statusCheck, { color: '#fff' }]}>✓</Text>
+              <Text style={[styles.statusText, { color: '#fff' }]}>{open ? 'Canteen is Open ' : 'Canteen is Closed'}</Text>
+              <Text style={[styles.statusDots, { color: '#fff' }]}>⋯</Text>
+            </View>
 
-          {/* Category Carousel */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
-            {categories.map((cat) => (
-              <CategoryTile
-                key={cat.value}
-                cat={cat}
-                isActive={category === cat.value}
-                onPress={() => setCategory((prev) => (prev === cat.value ? 'All' : cat.value))}
-              />
-            ))}
+            {/* Category Carousel */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.categoryRow}>
+              {categories.map((cat) => (
+                <CategoryTile
+                  key={cat.value}
+                  cat={cat}
+                  isActive={category === cat.value}
+                  onPress={() => setCategory((prev) => (prev === cat.value ? 'All' : cat.value))}
+                />
+              ))}
+            </ScrollView>
+
+            {/* Veg/Non-Veg Toggle */}
+            <View style={styles.vegRow}>
+              <Pressable onPress={() => setVegFilter('Veg')} style={[styles.vegPill, vegFilter === 'Veg' && styles.vegActive]}>
+                <Text style={styles.vegIcon}>🌿</Text>
+                <Text style={[styles.vegText, vegFilter === 'Veg' && styles.vegTextActive]}>Veg</Text>
+              </Pressable>
+              <Pressable onPress={() => setVegFilter('Non-Veg')} style={[styles.nonVegPill, vegFilter === 'Non-Veg' && styles.nonVegActive]}>
+                <Text style={styles.nonVegIcon}>🍗</Text>
+                <Text style={[styles.nonVegText, vegFilter === 'Non-Veg' && styles.nonVegTextActive]}>Non-Veg</Text>
+              </Pressable>
+              <Pressable onPress={() => setVegFilter('All')} style={styles.allPill}>
+                <View style={styles.dot} />
+                <View style={styles.dot} />
+              </Pressable>
+            </View>
+
+            {/* Popular Items */}
+            <Text style={styles.sectionTitle}>Popular Items</Text>
+            <View style={styles.grid}>
+              {filtered.map((item) => (
+                <View key={item.id} style={{ width: '48%' }}>
+                  <FoodCard item={item} disabled={!open} />
+                </View>
+              ))}
+            </View>
           </ScrollView>
-
-          {/* Veg/Non-Veg Toggle */}
-          <View style={styles.vegRow}>
-            <Pressable onPress={() => setVegFilter('Veg')} style={[styles.vegPill, vegFilter === 'Veg' && styles.vegActive]}>
-              <Text style={styles.vegIcon}>🌿</Text>
-              <Text style={[styles.vegText, vegFilter === 'Veg' && styles.vegTextActive]}>Veg</Text>
-            </Pressable>
-            <Pressable onPress={() => setVegFilter('Non-Veg')} style={[styles.nonVegPill, vegFilter === 'Non-Veg' && styles.nonVegActive]}>
-              <Text style={styles.nonVegIcon}>🍗</Text>
-              <Text style={[styles.nonVegText, vegFilter === 'Non-Veg' && styles.nonVegTextActive]}>Non-Veg</Text>
-            </Pressable>
-            <Pressable onPress={() => setVegFilter('All')} style={styles.allPill}>
-              <View style={styles.dot} />
-              <View style={styles.dot} />
-            </Pressable>
-          </View>
-
-          {/* Popular Items */}
-          <Text style={styles.sectionTitle}>Popular Items</Text>
-          <View style={styles.grid}>
-            {filtered.map((item) => (
-              <View key={item.id} style={{ width: '48%' }}>
-                <FoodCard item={item} disabled={!open} />
-              </View>
-            ))}
-          </View>
-          </ScrollView>
-       </View>
+        </View>
       </ImageBackground>
     </>
   );

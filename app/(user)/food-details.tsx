@@ -9,10 +9,10 @@ import type { MenuItem } from '@/components/FoodCard';
 export default function FoodDetails() {
   const params = useLocalSearchParams();
   const add = useCartStore((s) => s.addItem);
-  
+
   // Parse the item from params
   const item: MenuItem = JSON.parse(params.item as string);
-  
+
   const [quantity, setQuantity] = useState(1);
   const canteenOpen = useCanteenStore((s) => s.open);
 
@@ -34,18 +34,18 @@ export default function FoodDetails() {
 
   // Mock nutritional data - in real app, this would come from the item data
   const nutritionInfo = {
-    calories: item.category === 'Meals' ? 320 : item.category === 'Snacks' ? 200 : 150,
-    protein: item.category === 'Meals' ? 15 : item.category === 'Snacks' ? 8 : 3,
-    prepTime: '10 mins',
+    calories: item.calories || (item.category === 'Meals' ? 320 : item.category === 'Snacks' ? 200 : 150),
+    protein: item.protein || (item.category === 'Meals' ? 15 : item.category === 'Snacks' ? 8 : 3),
+    prepTime: item.prepTime ? `${item.prepTime} mins` : '10 mins',
   };
 
-  const ingredients = item.veg 
-    ? 'Paneer, Bell Peppers, Spices' 
-    : 'Chicken, Bell Peppers, Spices';
+  const ingredients = item.madeWith || (item.veg
+    ? 'Paneer, Bell Peppers, Spices'
+    : 'Chicken, Bell Peppers, Spices');
 
   return (
-    <ImageBackground 
-      source={require('../../design/background image.jpeg')} 
+    <ImageBackground
+      source={require('../../design/background image.jpeg')}
       style={styles.container}
       blurRadius={8}
     >
@@ -63,12 +63,12 @@ export default function FoodDetails() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.card}>
           {/* Food Image */}
-          {/* <View style={styles.imageContainer}>
-            <Image 
+          <View style={styles.imageContainer}>
+            <Image
               source={typeof item.image === 'number' ? item.image : { uri: item.image || 'https://via.placeholder.com/300' }}
               style={styles.foodImage}
             />
-          </View> */}
+          </View>
 
           {/* Food Info */}
           <View style={styles.infoSection}>
@@ -126,20 +126,20 @@ export default function FoodDetails() {
             <View style={styles.quantitySection}>
               <Text style={styles.quantityLabel}>Quantity</Text>
               <View style={styles.quantityControls}>
-                <Pressable 
+                <Pressable
                   onPress={() => setQuantity(Math.max(1, quantity - 1))}
                   style={styles.quantityBtn}
                 >
                   <Text style={styles.quantityBtnText}>−</Text>
                 </Pressable>
                 <Text style={styles.quantityValue}>{quantity}</Text>
-                <Pressable 
+                <Pressable
                   onPress={() => setQuantity(quantity + 1)}
                   style={styles.quantityBtnIncrease}
                 >
                   <Text style={styles.quantityBtnIncreaseText}>+</Text>
                 </Pressable>
-                <Pressable 
+                <Pressable
                   onPress={handleAddToCart}
                   style={styles.quantityBtnAddToCart}
                 >
@@ -157,7 +157,7 @@ export default function FoodDetails() {
           <Text style={styles.totalLabel}>Total</Text>
           <Text style={styles.totalAmount}>₹{item.price * quantity}</Text>
         </View>
-        <Pressable 
+        <Pressable
           onPress={handleAddToCart}
           disabled={!canteenOpen}
           style={({ pressed }) => [styles.addButton, (!canteenOpen) && { backgroundColor: '#6b7280' }, pressed && { opacity: 0.9 }]}

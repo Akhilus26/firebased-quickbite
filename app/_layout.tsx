@@ -14,7 +14,7 @@ export default function RootLayout() {
   useEffect(() => {
     // Initialize Firebase Auth state listener
     const unsubscribe = initializeAuth();
-    
+
     return () => {
       if (unsubscribe) {
         unsubscribe();
@@ -36,11 +36,11 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(auth)" />
-      <Stack.Screen name="(user)" />
-      <Stack.Screen name="(owner)" />
-      <Stack.Screen name="(admin)" />
-      <Stack.Screen name="(staff)" />
+        <Stack.Screen name="(auth)" />
+        <Stack.Screen name="(user)" />
+        <Stack.Screen name="(owner)" />
+        <Stack.Screen name="(admin)" />
+
       </Stack>
     </QueryClientProvider>
   );

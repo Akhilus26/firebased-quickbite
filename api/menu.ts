@@ -1,15 +1,15 @@
 import type { MenuItem } from '@/components/FoodCard';
 import { db } from '@/config/firebase';
-import { 
-  collection, 
-  getDocs, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  doc, 
-  query, 
+import {
+  collection,
+  getDocs,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  query,
   orderBy,
-  Timestamp 
+  Timestamp
 } from 'firebase/firestore';
 
 const MENU_COLLECTION = 'menuItems';
@@ -31,6 +31,7 @@ function docToMenuItem(docData: any, docId: string): MenuItem {
     protein: data.protein,
     prepTime: data.prepTime,
     quantity: data.quantity,
+    counter: data.counter || 'Snacks & Hot Beverages',
   };
 }
 
@@ -50,6 +51,7 @@ function menuItemToDoc(item: MenuItem): any {
     protein: item.protein || null,
     prepTime: item.prepTime || null,
     quantity: item.quantity || null,
+    counter: item.counter || 'Snacks & Hot Beverages',
   };
 }
 
@@ -58,13 +60,13 @@ export async function getMenu(): Promise<MenuItem[]> {
     const menuRef = collection(db, MENU_COLLECTION);
     const q = query(menuRef, orderBy('id', 'desc')); // Order by id descending
     const querySnapshot = await getDocs(q);
-    
+
     const menu: MenuItem[] = [];
     querySnapshot.forEach((docSnapshot) => {
       const menuItem = docToMenuItem(docSnapshot.data(), docSnapshot.id);
       menu.push(menuItem);
     });
-    
+
     return menu;
   } catch (error) {
     console.error('Error fetching menu:', error);
@@ -72,25 +74,26 @@ export async function getMenu(): Promise<MenuItem[]> {
   }
 }
 
-export async function addMenuItem(partial: { 
-  name: string; 
-  price: number; 
-  veg: boolean; 
-  category: MenuItem['category']; 
-  available: boolean; 
-  image?: string | number; 
-  description?: string; 
-  madeWith?: string; 
-  calories?: number; 
-  protein?: number; 
-  prepTime?: number; 
-  quantity?: number; 
+export async function addMenuItem(partial: {
+  name: string;
+  price: number;
+  veg: boolean;
+  category: MenuItem['category'];
+  available: boolean;
+  image?: string | number;
+  description?: string;
+  madeWith?: string;
+  calories?: number;
+  protein?: number;
+  prepTime?: number;
+  quantity?: number;
+  counter: MenuItem['counter'];
 }): Promise<MenuItem> {
   try {
     // Get current menu to determine next ID
     const currentMenu = await getMenu();
-    const maxId = currentMenu.length > 0 
-      ? Math.max(...currentMenu.map(m => m.id)) 
+    const maxId = currentMenu.length > 0
+      ? Math.max(...currentMenu.map(m => m.id))
       : 0;
     const nextId = maxId + 1;
 
@@ -108,11 +111,12 @@ export async function addMenuItem(partial: {
       protein: partial.protein ?? undefined,
       prepTime: partial.prepTime ?? undefined,
       quantity: partial.quantity ?? undefined,
+      counter: partial.counter,
     };
 
     const docData = menuItemToDoc(item);
     const docRef = await addDoc(collection(db, MENU_COLLECTION), docData);
-    
+
     return item;
   } catch (error) {
     console.error('Error adding menu item:', error);
@@ -124,7 +128,7 @@ export async function updateMenuItem(id: number, updates: Partial<MenuItem>): Pr
   try {
     const menuRef = collection(db, MENU_COLLECTION);
     const querySnapshot = await getDocs(menuRef);
-    
+
     let docId: string | null = null;
     querySnapshot.forEach((docSnapshot) => {
       const data = docSnapshot.data();
@@ -148,7 +152,8 @@ export async function updateMenuItem(id: number, updates: Partial<MenuItem>): Pr
       if (updates.protein !== undefined) updateData.protein = updates.protein;
       if (updates.prepTime !== undefined) updateData.prepTime = updates.prepTime;
       if (updates.quantity !== undefined) updateData.quantity = updates.quantity;
-      
+      if (updates.counter !== undefined) updateData.counter = updates.counter;
+
       await updateDoc(docRef, updateData);
     }
   } catch (error) {
@@ -161,7 +166,7 @@ export async function deleteMenuItem(id: number): Promise<void> {
   try {
     const menuRef = collection(db, MENU_COLLECTION);
     const querySnapshot = await getDocs(menuRef);
-    
+
     let docId: string | null = null;
     querySnapshot.forEach((docSnapshot) => {
       const data = docSnapshot.data();

@@ -84,62 +84,72 @@ export default function UserTabs() {
         },
       }}
     >
-      <Tabs.Screen 
-        name="index" 
-        options={{ 
+      <Tabs.Screen
+        name="index"
+        options={{
           title: 'Home',
           tabBarIcon: ({ color, focused }) => (
             <AnimatedTabIcon name={focused ? 'home' : 'home-outline'} color={color} focused={focused} />
           ),
-        }} 
+        }}
       />
-      <Tabs.Screen 
-        name="orders" 
-        options={{ 
+      <Tabs.Screen
+        name="orders"
+        options={{
           title: 'Orders',
           tabBarIcon: ({ color, focused }) => (
             <AnimatedTabIcon name={focused ? 'list' : 'list-outline'} color={color} focused={focused} />
           ),
-        }} 
+        }}
       />
-      <Tabs.Screen 
-        name="cart" 
-        options={{ 
+      <Tabs.Screen
+        name="cart"
+        options={{
           title: 'Cart',
           tabBarIcon: ({ color, focused }) => (
             <AnimatedTabIcon name={focused ? 'cart' : 'cart-outline'} color={color} focused={focused} />
           ),
-        }} 
+        }}
       />
-      <Tabs.Screen 
-        name="wallet" 
-        options={{ 
+      <Tabs.Screen
+        name="wallet"
+        options={{
           title: 'Wallet',
           tabBarIcon: ({ color, focused }) => (
             <AnimatedTabIcon name={focused ? 'wallet' : 'wallet-outline'} color={color} focused={focused} />
           ),
-        }} 
+        }}
       />
-      <Tabs.Screen 
-        name="profile" 
-        options={{ 
+      <Tabs.Screen
+        name="scratch-cards"
+        options={{
+          title: 'Scratch',
+          tabBarIcon: ({ color, focused }) => (
+            <AnimatedTabIcon name={focused ? 'gift' : 'gift-outline'} color={color} focused={focused} />
+          ),
+          href: '/(user)/scratch-cards', // Ensure it's active in the tab bar
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
           title: 'Profile',
           tabBarIcon: ({ color, focused }) => (
             <AnimatedTabIcon name={focused ? 'person' : 'person-outline'} color={color} focused={focused} />
           ),
-        }} 
+        }}
       />
-      <Tabs.Screen 
-        name="food-details" 
-        options={{ 
+      <Tabs.Screen
+        name="food-details"
+        options={{
           href: null, // Hide from tab bar
-        }} 
+        }}
       />
-      <Tabs.Screen 
-        name="payment" 
-        options={{ 
+      <Tabs.Screen
+        name="payment"
+        options={{
           href: null, // Hide from tab bar
-        }} 
+        }}
       />
     </Tabs>
   );

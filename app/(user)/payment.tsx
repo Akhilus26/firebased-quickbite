@@ -204,23 +204,19 @@ export default function Payment() {
       }
     }
 
-    const order = await createOrder(items, phone);
+    const order = await createOrder(items, selectedPayment, phone || 'unknown');
     clear();
-    Alert.alert(
-      'Order Placed Successfully!',
-      `Your order code is: ${order.orderCode}\n\nPlease present this code at the counter to collect your order.`,
-      [
-        {
-          text: 'View Orders',
-          onPress: () => router.push('/(user)/orders'),
-        },
-      ]
-    );
+
+    // Auto-navigate to Scratch Cards page after successful "payment"
+    router.replace({
+      pathname: '/(user)/scratch-cards',
+      params: { orderId: order.id.toString() }
+    });
   };
 
   return (
-    <ImageBackground 
-      source={require('../../design/background image.jpeg')} 
+    <ImageBackground
+      source={require('../../design/background image.jpeg')}
       style={styles.container}
       blurRadius={8}
     >
@@ -242,7 +238,7 @@ export default function Payment() {
         </View>
 
         <View style={styles.paymentOptions}>
-          <Pressable 
+          <Pressable
             onPress={() => setSelectedPayment('card')}
             style={styles.paymentOption}
           >
@@ -259,7 +255,7 @@ export default function Payment() {
             <Text style={styles.paymentArrow}>›</Text>
           </Pressable>
 
-          <Pressable 
+          <Pressable
             onPress={() => setSelectedPayment('upi')}
             style={styles.paymentOption}
           >
@@ -272,7 +268,7 @@ export default function Payment() {
             <Text style={styles.paymentArrow}>›</Text>
           </Pressable>
 
-          <Pressable 
+          <Pressable
             onPress={() => setSelectedPayment('cod')}
             style={styles.paymentOption}
           >
@@ -293,11 +289,11 @@ export default function Payment() {
       </ScrollView>
 
       <View style={styles.checkoutBar}>
-        <Pressable 
-          onPress={handleCheckout} 
+        <Pressable
+          onPress={handleCheckout}
           disabled={!canteenOpen}
-          style={({pressed}) => [
-            styles.checkoutBtn, 
+          style={({ pressed }) => [
+            styles.checkoutBtn,
             !canteenOpen && { backgroundColor: '#6b7280' },
             pressed && { opacity: 0.9 }
           ]}

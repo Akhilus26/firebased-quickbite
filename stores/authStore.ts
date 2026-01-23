@@ -5,6 +5,7 @@ import { Platform } from 'react-native';
 import { signOut as firebaseSignOut, User, onAuthStateChanged } from 'firebase/auth';
 import { auth } from '@/config/firebase';
 import * as WebBrowser from 'expo-web-browser';
+import { useCartStore } from './cartStore';
 
 // Storage helper
 const tokenStorage = {
@@ -34,7 +35,7 @@ const tokenStorage = {
 // Complete the auth session (required for Expo)
 WebBrowser.maybeCompleteAuthSession();
 
-type Role = 'guest' | 'user' | 'owner' | 'admin' | 'staff';
+type Role = 'guest' | 'user' | 'owner' | 'admin';
 
 type State = {
   role: Role;
@@ -52,7 +53,7 @@ type Actions = {
   logout: () => Promise<void>;
   isGuest: () => boolean;
   setUser: (user: User | null) => void;
-  initializeAuth: () => void;
+  initializeAuth: () => () => void;
 };
 
 const KEY = 'quickbite_auth_v1';
@@ -105,6 +106,8 @@ export const useAuthStore = create<State & Actions>((set, get) => ({
       displayName: undefined,
       photoURL: undefined
     });
+    // Clear the cart on logout to ensure different users have different carts
+    useCartStore.getState().clear();
     try {
       await SecureStore.deleteItemAsync(KEY);
     } catch { }
@@ -112,19 +115,39 @@ export const useAuthStore = create<State & Actions>((set, get) => ({
   isGuest() {
     return get().role === 'guest';
   },
-  setUser(user: User | null) {
+  async setUser(user: User | null) {
     if (user) {
-      set({
-        user,
-        email: user.email || undefined,
-        displayName: user.displayName || undefined,
-        photoURL: user.photoURL || undefined,
-        role: 'user',
-        isLoading: false,
-      });
+      // Fetch user metadata from Firestore to get the correct role
+      const { getFirestore, doc, getDoc } = require('firebase/firestore');
+      const db = getFirestore();
+
+      try {
+        const userDoc = await getDoc(doc(db, 'users', user.uid));
+        const data = userDoc.data();
+
+        set({
+          user,
+          email: user.email || undefined,
+          displayName: data?.displayName || user.displayName || undefined,
+          photoURL: user.photoURL || undefined,
+          role: (data?.userType as Role) || 'user',
+          isLoading: false,
+        });
+      } catch (error) {
+        console.error('Error fetching user metadata:', error);
+        set({
+          user,
+          email: user.email || undefined,
+          displayName: user.displayName || undefined,
+          photoURL: user.photoURL || undefined,
+          role: 'user',
+          isLoading: false,
+        });
+      }
     } else {
       set({
         user: null,
+        role: 'guest',
         email: undefined,
         displayName: undefined,
         photoURL: undefined,

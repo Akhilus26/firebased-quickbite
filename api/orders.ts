@@ -1,22 +1,33 @@
 import type { CartLine } from '@/stores/cartStore';
 import { db } from '@/config/firebase';
-import { 
-  collection, 
-  getDocs, 
-  addDoc, 
-  updateDoc, 
-  doc, 
-  query, 
-  where, 
+import {
+  collection,
+  getDocs,
+  addDoc,
+  updateDoc,
+  doc,
+  query,
+  where,
   orderBy,
-  Timestamp 
+  Timestamp
 } from 'firebase/firestore';
 import { useAuthStore } from '@/stores/authStore';
 
 export type OrderItemDelivery = {
   itemId: number;
-  counter: 'Snacks' | 'Meals' | 'Cold Beverages';
+  counter: 'Snacks & Hot Beverages' | 'Meals' | 'Cold Beverages';
   delivered: boolean;
+};
+
+export type ScratchToken = {
+  id?: string;
+  orderId: number;
+  userId: string;
+  counter: 'Snacks & Hot Beverages' | 'Meals' | 'Cold Beverages';
+  used: boolean;
+  expiresAt: Timestamp;
+  revealedAt?: Timestamp | null;
+  items: { name: string; qty: number }[];
 };
 
 export type Order = {
@@ -28,6 +39,7 @@ export type Order = {
   createdAt: number; // epoch ms
   itemDeliveryStatus: OrderItemDelivery[]; // Track delivery per item per counter
   userId?: string; // Phone number of the user who placed the order
+  paymentMethod: string;
 };
 
 const ORDERS_COLLECTION = 'orders';
@@ -36,7 +48,7 @@ const ORDERS_COLLECTION = 'orders';
 function docToOrder(docData: any, docId: string): Order {
   const data = docData;
   const createdAt = data.createdAt?.toMillis ? data.createdAt.toMillis() : data.createdAt || Date.now();
-  
+
   return {
     id: data.id || parseInt(docId, 10) || 0,
     orderCode: data.orderCode || '',
@@ -46,6 +58,7 @@ function docToOrder(docData: any, docId: string): Order {
     createdAt: createdAt,
     itemDeliveryStatus: data.itemDeliveryStatus || [],
     userId: data.userId,
+    paymentMethod: data.paymentMethod || 'Unknown',
   };
 }
 
@@ -60,6 +73,7 @@ function orderToDoc(order: Order): any {
     createdAt: Timestamp.fromMillis(order.createdAt),
     itemDeliveryStatus: order.itemDeliveryStatus,
     userId: order.userId || null,
+    paymentMethod: order.paymentMethod,
   };
 }
 
@@ -72,59 +86,85 @@ async function generateOrderCode(): Promise<string> {
 
   while (!isUnique && attempts < maxAttempts) {
     code = Math.floor(1000 + Math.random() * 9000).toString();
-    
+
     // Check if code exists in Firestore
     const ordersRef = collection(db, ORDERS_COLLECTION);
     const q = query(ordersRef, where('orderCode', '==', code));
     const querySnapshot = await getDocs(q);
-    
+
     if (querySnapshot.empty) {
       isUnique = true;
       return code;
     }
-    
+
     attempts++;
   }
-  
+
   // Fallback: use timestamp-based code if uniqueness check fails
   return Date.now().toString().slice(-4);
 }
 
-export async function createOrder(items: CartLine[], userId?: string): Promise<Order> {
+export async function createOrder(items: CartLine[], paymentMethod: string, userId?: string): Promise<Order> {
   try {
     const total = items.reduce((s, l) => s + l.price * l.qty, 0);
     const orderCode = await generateOrderCode();
-    
-    // Create delivery status for each item based on its category
+
+    // Create delivery status for each item based on its counter
     const itemDeliveryStatus: OrderItemDelivery[] = items.map(item => ({
       itemId: item.id,
-      counter: item.category === 'Snacks' ? 'Snacks' : 
-               item.category === 'Meals' ? 'Meals' : 
-               item.category === 'Cold Beverages' ? 'Cold Beverages' : 'Snacks', // Default fallback
+      counter: item.counter || 'Snacks & Hot Beverages',
       delivered: false,
     }));
-    
+
+    // Detect unique counters
+    const uniqueCounters = Array.from(new Set(items.map(i => i.counter || 'Snacks & Hot Beverages')));
+
     // Get next order ID
     const allOrders = await getAllOrders();
-    const maxId = allOrders.length > 0 
-      ? Math.max(...allOrders.map(o => o.id)) 
+    const maxId = allOrders.length > 0
+      ? Math.max(...allOrders.map(o => o.id))
       : 0;
     const nextId = maxId + 1;
-    
-    const order: Order = { 
-      id: nextId, 
+
+    const order: Order = {
+      id: nextId,
       orderCode,
-      items, 
-      total, 
-      status: 'pending', 
+      items,
+      total,
+      status: 'completed',
       createdAt: Date.now(),
       itemDeliveryStatus,
       userId: userId,
+      paymentMethod,
     };
 
     const docData = orderToDoc(order);
     await addDoc(collection(db, ORDERS_COLLECTION), docData);
-    
+
+    // Generate Scratch Tokens
+    const scratchTokensRef = collection(db, 'scratchTokens');
+    const expiresAt = Timestamp.fromMillis(Date.now() + 8 * 60 * 60 * 1000); // 8 hours from now
+
+    for (const counterName of uniqueCounters) {
+      const token = Math.floor(100000 + Math.random() * 900000).toString(); // 6 digit random token
+
+      // Filter items belonging to this counter
+      const counterItems = items
+        .filter(i => (i.counter || 'Snacks & Hot Beverages') === counterName)
+        .map(i => ({ name: i.name, qty: i.qty }));
+
+      const scratchToken: ScratchToken = {
+        orderId: nextId,
+        userId: userId || 'unknown',
+        counter: counterName as any,
+        used: false,
+        expiresAt: expiresAt,
+        revealedAt: null,
+        items: counterItems,
+      };
+      await addDoc(scratchTokensRef, scratchToken as any);
+    }
+
     return order;
   } catch (error) {
     console.error('Error creating order:', error);
@@ -136,27 +176,27 @@ export async function getMyOrders(userId?: string): Promise<Order[]> {
   try {
     const ordersRef = collection(db, ORDERS_COLLECTION);
     let q;
-    
+
     if (userId) {
       // Remove orderBy to avoid composite index requirement
       q = query(ordersRef, where('userId', '==', userId));
     } else {
       q = query(ordersRef, orderBy('createdAt', 'desc'));
     }
-    
+
     const querySnapshot = await getDocs(q);
     const orders: Order[] = [];
-    
+
     querySnapshot.forEach((docSnapshot) => {
       const order = docToOrder(docSnapshot.data(), docSnapshot.id);
       orders.push(order);
     });
-    
+
     // Sort client-side if filtered by userId
     if (userId) {
       orders.sort((a, b) => b.createdAt - a.createdAt);
     }
-    
+
     return orders;
   } catch (error) {
     console.error('Error fetching my orders:', error);
@@ -169,13 +209,13 @@ export async function getAllOrders(): Promise<Order[]> {
     const ordersRef = collection(db, ORDERS_COLLECTION);
     const q = query(ordersRef, orderBy('createdAt', 'desc'));
     const querySnapshot = await getDocs(q);
-    
+
     const orders: Order[] = [];
     querySnapshot.forEach((docSnapshot) => {
       const order = docToOrder(docSnapshot.data(), docSnapshot.id);
       orders.push(order);
     });
-    
+
     return orders;
   } catch (error) {
     console.error('Error fetching all orders:', error);
@@ -187,7 +227,7 @@ export async function updateOrderStatusInOrders(id: number, status: Order['statu
   try {
     const ordersRef = collection(db, ORDERS_COLLECTION);
     const querySnapshot = await getDocs(ordersRef);
-    
+
     let docId: string | null = null;
     querySnapshot.forEach((docSnapshot) => {
       const data = docSnapshot.data();
