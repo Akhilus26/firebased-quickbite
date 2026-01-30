@@ -2,14 +2,15 @@ import type { CartLine } from '@/stores/cartStore';
 import { db } from '@/config/firebase';
 import {
   collection,
-  getDocs,
   addDoc,
   updateDoc,
   doc,
   query,
   where,
   orderBy,
-  Timestamp
+  Timestamp,
+  arrayUnion,
+  getDocs
 } from 'firebase/firestore';
 import { useAuthStore } from '@/stores/authStore';
 
@@ -38,14 +39,21 @@ export type Order = {
   status: 'pending' | 'preparing' | 'ready' | 'completed';
   createdAt: number; // epoch ms
   itemDeliveryStatus: OrderItemDelivery[]; // Track delivery per item per counter
-  userId?: string; // Phone number of the user who placed the order
+  userId?: string; // Firebase Auth UID of the user who placed the order
   paymentMethod: string;
+  revealedCounters?: string[]; // Counters that have been revealed by the user
+  customer?: {
+    name: string;
+    phone: string;
+    type: string;
+    id: string; // admissionNumber or teacherId
+  };
 };
 
 const ORDERS_COLLECTION = 'orders';
 
 // Convert Firestore document to Order
-function docToOrder(docData: any, docId: string): Order {
+export function docToOrder(docData: any, docId: string): Order {
   const data = docData;
   const createdAt = data.createdAt?.toMillis ? data.createdAt.toMillis() : data.createdAt || Date.now();
 
@@ -59,6 +67,8 @@ function docToOrder(docData: any, docId: string): Order {
     itemDeliveryStatus: data.itemDeliveryStatus || [],
     userId: data.userId,
     paymentMethod: data.paymentMethod || 'Unknown',
+    revealedCounters: data.revealedCounters || [],
+    customer: data.customer || null,
   };
 }
 
@@ -74,6 +84,8 @@ function orderToDoc(order: Order): any {
     itemDeliveryStatus: order.itemDeliveryStatus,
     userId: order.userId || null,
     paymentMethod: order.paymentMethod,
+    revealedCounters: order.revealedCounters || [],
+    customer: order.customer || null,
   };
 }
 
@@ -126,16 +138,35 @@ export async function createOrder(items: CartLine[], paymentMethod: string, user
       : 0;
     const nextId = maxId + 1;
 
+    // Fetch customer info from Firestore
+    let customerData = undefined;
+    const authStore = useAuthStore.getState();
+    if (authStore.user) {
+      const { getDoc, doc } = require('firebase/firestore');
+      const userDoc = await getDoc(doc(db, 'users', authStore.user.uid));
+      if (userDoc.exists()) {
+        const u = userDoc.data();
+        customerData = {
+          name: u.displayName || 'Unknown',
+          phone: u.phoneNumber || 'Unknown',
+          type: u.userType || 'user',
+          id: u.admissionNumber || u.teacherId || 'N/A'
+        };
+      }
+    }
+
     const order: Order = {
       id: nextId,
       orderCode,
       items,
       total,
-      status: 'completed',
+      status: 'pending', // New orders should be pending
       createdAt: Date.now(),
       itemDeliveryStatus,
       userId: userId,
       paymentMethod,
+      revealedCounters: [],
+      customer: customerData,
     };
 
     const docData = orderToDoc(order);
@@ -242,6 +273,24 @@ export async function updateOrderStatusInOrders(id: number, status: Order['statu
     }
   } catch (error) {
     console.error('Error updating order status:', error);
+    throw error;
+  }
+}
+
+export async function markCounterAsRevealed(orderId: number, counter: string) {
+  try {
+    const ordersRef = collection(db, ORDERS_COLLECTION);
+    const q = query(ordersRef, where('id', '==', orderId));
+    const querySnapshot = await getDocs(q);
+
+    if (!querySnapshot.empty) {
+      const docRef = doc(db, ORDERS_COLLECTION, querySnapshot.docs[0].id);
+      await updateDoc(docRef, {
+        revealedCounters: arrayUnion(counter)
+      });
+    }
+  } catch (error) {
+    console.error('Error marking counter as revealed:', error);
     throw error;
   }
 }

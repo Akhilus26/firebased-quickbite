@@ -1,19 +1,52 @@
-import React from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, ImageBackground } from 'react-native';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getLiveOrders, updateOrderStatus } from '@/api/owner';
+import React, { useState, useEffect } from 'react';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, ImageBackground, ActivityIndicator } from 'react-native';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { updateOrderStatus } from '@/api/owner';
 import { useLocalSearchParams } from 'expo-router';
 import { OwnerHeader, OwnerTabBar, COLORS } from '@/components/OwnerUI';
+import { collection, query, where, onSnapshot, orderBy } from 'firebase/firestore';
+import { db } from '@/config/firebase';
+import { docToOrder, Order } from '@/api/orders';
+import { Ionicons } from '@expo/vector-icons';
 
 export default function OwnerOrders() {
-  const qc = useQueryClient();
   const params = useLocalSearchParams();
-  const status = (params.status as 'pending'|'preparing'|'ready'|'completed'|undefined);
-  const { data = [] } = useQuery({ queryKey: ['owner:live', status], queryFn: () => getLiveOrders(status) });
+  const filterStatus = (params.status as Order['status']);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const ordersRef = collection(db, 'orders');
+    let q = query(ordersRef, orderBy('createdAt', 'desc'));
+
+    if (filterStatus) {
+      q = query(ordersRef, where('status', '==', filterStatus), orderBy('createdAt', 'desc'));
+    }
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list: Order[] = [];
+      snapshot.forEach((doc) => {
+        list.push(docToOrder(doc.data(), doc.id));
+      });
+      setOrders(list);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [filterStatus]);
+
   const { mutate } = useMutation({
-    mutationFn: (p: { id: number; status: 'preparing'|'ready'|'completed' }) => updateOrderStatus(p.id, p.status),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['owner:live'] }); }
+    mutationFn: (p: { id: number; status: 'preparing' | 'ready' | 'completed' }) => updateOrderStatus(p.id, p.status),
   });
+
+  if (loading) {
+    return (
+      <View style={[styles.overlay, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={COLORS.blue} />
+        <Text style={{ marginTop: 15, color: COLORS.sub, fontWeight: '700' }}>Loading orders...</Text>
+      </View>
+    );
+  }
 
   const Action = ({ label, color, onPress }: { label: string; color: string; onPress: () => void }) => (
     <TouchableOpacity onPress={onPress} style={[styles.actionBtn, { backgroundColor: color }]}>
@@ -29,7 +62,29 @@ export default function OwnerOrders() {
           <Text style={[styles.badgeText, { color: item.status === 'completed' ? '#166534' : '#7f1d1d' }]}>{item.status}</Text>
         </View>
       </View>
-      <Text style={styles.subtitle}>Items: {item.items.reduce((n:any,l:any)=> n + l.qty, 0)} • Total: ₹{item.total}</Text>
+
+      {/* Customer Info Section */}
+      {item.customer && (
+        <View style={styles.customerBox}>
+          <View style={styles.customerRow}>
+            <Ionicons name="person" size={14} color={COLORS.text} />
+            <Text style={styles.customerName}>{item.customer.name}</Text>
+            <View style={styles.typeTag}>
+              <Text style={styles.typeTagText}>{item.customer.type.toUpperCase()}</Text>
+            </View>
+          </View>
+          <View style={styles.customerRow}>
+            <Ionicons name="call" size={14} color={COLORS.sub} />
+            <Text style={styles.customerDetail}>{item.customer.phone}</Text>
+          </View>
+          <View style={styles.customerRow}>
+            <Ionicons name="finger-print" size={14} color={COLORS.sub} />
+            <Text style={styles.customerDetail}>ID: {item.customer.id}</Text>
+          </View>
+        </View>
+      )}
+
+      <Text style={styles.itemSummary}>Items: {item.items.reduce((n: any, l: any) => n + l.qty, 0)} • Total: ₹{item.total}</Text>
       <View style={styles.actionsRow}>
         <Action label="Preparing" color={COLORS.blue} onPress={() => mutate({ id: item.id, status: 'preparing' })} />
         <Action label="Ready" color={COLORS.accent} onPress={() => mutate({ id: item.id, status: 'ready' })} />
@@ -44,7 +99,7 @@ export default function OwnerOrders() {
         <OwnerHeader title="Orders" />
         <FlatList
           contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
-          data={data}
+          data={orders}
           keyExtractor={(o) => String(o.id)}
           renderItem={renderItem}
           ItemSeparatorComponent={() => <View style={{ height: 10 }} />}
@@ -71,11 +126,46 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6, alignItems: 'center' },
-  title: { fontWeight: '800', color: COLORS.text },
-  subtitle: { color: COLORS.sub, marginTop: 4 },
+  title: { fontSize: 18, fontWeight: '900', color: COLORS.text },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
-  badgeText: { fontWeight: '700', textTransform: 'capitalize' },
-  actionsRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
-  actionBtn: { flex: 1, alignItems: 'center', paddingVertical: 10, borderRadius: 10 },
-  actionText: { color: '#fff', fontWeight: '800' },
+  badgeText: { fontWeight: '700', textTransform: 'capitalize', fontSize: 12 },
+
+  customerBox: {
+    backgroundColor: 'rgba(0,0,0,0.03)',
+    padding: 10,
+    borderRadius: 10,
+    marginVertical: 8,
+    gap: 4,
+  },
+  customerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  customerName: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: COLORS.text,
+  },
+  customerDetail: {
+    fontSize: 13,
+    color: COLORS.sub,
+    fontWeight: '600',
+  },
+  typeTag: {
+    backgroundColor: COLORS.blue,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  typeTagText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '900',
+  },
+
+  itemSummary: { color: COLORS.text, marginTop: 4, fontWeight: '700', fontSize: 14 },
+  actionsRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
+  actionBtn: { flex: 1, alignItems: 'center', paddingVertical: 12, borderRadius: 10 },
+  actionText: { color: '#fff', fontWeight: '800', fontSize: 13 },
 });

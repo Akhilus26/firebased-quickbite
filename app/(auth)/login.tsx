@@ -111,6 +111,27 @@ export default function Login() {
     }
   }, [response, handleGoogleSignIn]);
 
+  const getAuthErrorMessage = (errorCode: string) => {
+    switch (errorCode) {
+      case 'auth/invalid-email':
+        return 'Invalid email address format.';
+      case 'auth/user-not-found':
+        return 'No account found with this email.';
+      case 'auth/wrong-password':
+        return 'Incorrect password. Please try again.';
+      case 'auth/email-already-in-use':
+        return 'This email is already registered. Please sign in instead.';
+      case 'auth/weak-password':
+        return 'Password should be at least 6 characters.';
+      case 'auth/network-request-failed':
+        return 'Network error. Please check your connection.';
+      case 'auth/invalid-credential':
+        return 'Invalid email or password.';
+      default:
+        return 'Authentication failed. Please try again.';
+    }
+  };
+
   const onEmailAuth = async () => {
     if (!email || !password) {
       Alert.alert('Required', 'Please enter both email and password.');
@@ -156,7 +177,7 @@ export default function Login() {
       }
     } catch (error: any) {
       console.error('Email Auth Error:', error);
-      Alert.alert('Authentication Failed', error.message);
+      Alert.alert('Authentication Failed', getAuthErrorMessage(error.code));
     } finally {
       setIsEmailLoading(false);
     }

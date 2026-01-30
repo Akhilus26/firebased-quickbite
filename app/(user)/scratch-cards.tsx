@@ -4,9 +4,10 @@ import { useLocalSearchParams, router } from 'expo-router';
 import { collection, query, where, doc, onSnapshot, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { ScratchCard } from '@/components/ScratchCard';
-import { ScratchToken } from '@/api/orders';
+import { ScratchToken, markCounterAsRevealed } from '@/api/orders';
 import * as ScreenCapture from 'expo-screen-capture';
 import { Ionicons } from '@expo/vector-icons';
+import { useAuthStore } from '@/stores/authStore';
 
 const ORANGE = '#f97316';
 const DARK_BLUE = '#1e293b';
@@ -38,25 +39,52 @@ export default function ScratchCardsPage() {
         };
     }, []);
 
-    useEffect(() => {
-        if (!orderId) return;
+    const user = useAuthStore((s) => s.user);
+    const userId = user?.uid;
 
+    useEffect(() => {
+        if (!userId) {
+            const authState = useAuthStore.getState();
+            if (!authState.isLoading && !authState.user) {
+                setLoading(false);
+            }
+            return;
+        }
+
+        // Always query for all tokens belonging to this user
         const q = query(
             collection(db, 'scratchTokens'),
-            where('orderId', '==', parseInt(orderId as string, 10))
+            where('userId', '==', userId)
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const tokensData: any[] = [];
+            const now = Date.now();
+
             snapshot.forEach((doc) => {
-                tokensData.push({ id: doc.id, ...doc.data() });
+                const data = doc.data();
+                const revealedAt = data.revealedAt?.toMillis ? data.revealedAt.toMillis() : (data.revealedAt as any);
+
+                // Keep if:
+                // 1. Not used yet
+                // 2. OR Used but revealed within the last 5 minutes
+                const isRecentlyRevealed = revealedAt && (now - revealedAt < 5 * 60 * 1000);
+
+                if (!data.used || isRecentlyRevealed) {
+                    tokensData.push({ id: doc.id, ...data });
+                }
             });
+
+            // Prevent flash by ensuring min loading time or just setting state
             setTokens(tokensData);
-            setLoading(false);
+
+            // Add a small delay if it's too fast, or just set loading false
+            if (loading) setTimeout(() => setLoading(false), 500);
+            else setLoading(false);
         });
 
         return () => unsubscribe();
-    }, [orderId]);
+    }, [orderId, userId]);
 
     const handleReveal = async (tokenId: string) => {
         try {
@@ -65,6 +93,12 @@ export default function ScratchCardsPage() {
                 used: true,
                 revealedAt: serverTimestamp()
             });
+
+            // Notify owner that this counter's items are being picked up
+            const tokenSnap = tokens.find(t => t.id === tokenId);
+            if (tokenSnap) {
+                await markCounterAsRevealed(tokenSnap.orderId, tokenSnap.counter);
+            }
         } catch (error) {
             console.error('Error updating token status:', error);
         }
@@ -123,7 +157,15 @@ export default function ScratchCardsPage() {
                     </Text>
                 </View>
 
-                {filteredTokens.length === 0 ? (
+                {!orderId && tokens.length === 0 ? (
+                    <View style={styles.emptyState}>
+                        <View style={styles.emptyIconCircle}>
+                            <Ionicons name="gift-outline" size={40} color="#94a3b8" />
+                        </View>
+                        <Text style={styles.emptyText}>No Active Cards</Text>
+                        <Text style={styles.emptySubtext}>You don't have any un-scratched cards.</Text>
+                    </View>
+                ) : filteredTokens.length === 0 ? (
                     <View style={styles.emptyState}>
                         <View style={styles.emptyIconCircle}>
                             <Ionicons name="cart-outline" size={40} color="#94a3b8" />

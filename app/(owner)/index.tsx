@@ -225,6 +225,9 @@ export default function OwnerDashboard() {
 
                 {menuOpen && (
                     <View style={styles.dropdown}>
+                        <TouchableOpacity onPress={() => { setMenuOpen(false); router.push('/(owner)/users' as any); }} style={styles.dropdownItem}>
+                            <Text style={styles.dropdownText}>User Management</Text>
+                        </TouchableOpacity>
                         <TouchableOpacity onPress={() => { setMenuOpen(false); router.push('/(owner)/reports' as any); }} style={styles.dropdownItem}>
                             <Text style={styles.dropdownText}>View Analytics</Text>
                         </TouchableOpacity>
@@ -259,18 +262,52 @@ export default function OwnerDashboard() {
                                     <View style={styles.modalInfoRow}><Text style={styles.modalLabel}>ID:</Text><Text style={styles.modalValue}>#{selectedOrder.id}</Text></View>
                                     <View style={styles.modalInfoRow}><Text style={styles.modalLabel}>Payment:</Text><Text style={styles.modalValue}>{selectedOrder.paymentMethod.toUpperCase()}</Text></View>
                                     <View style={styles.modalInfoRow}><Text style={styles.modalLabel}>Time:</Text><Text style={styles.modalValue}>{formatDate(selectedOrder.createdAt)} {formatTime(selectedOrder.createdAt)}</Text></View>
+
+                                    <View style={styles.modalDivider} />
+                                    <Text style={styles.modalSectionTitle}>CUSTOMER DETAILS</Text>
+                                    {selectedOrder.customer ? (
+                                        <View style={styles.customerDetailBox}>
+                                            <View style={styles.modalInfoRow}>
+                                                <Text style={styles.modalLabel}>Name:</Text>
+                                                <Text style={styles.modalValue}>{selectedOrder.customer.name}</Text>
+                                            </View>
+                                            <View style={styles.modalInfoRow}>
+                                                <Text style={styles.modalLabel}>Type:</Text>
+                                                <Text style={[styles.modalValue, { textTransform: 'capitalize' }]}>{selectedOrder.customer.type}</Text>
+                                            </View>
+                                            <View style={styles.modalInfoRow}>
+                                                <Text style={styles.modalLabel}>ID:</Text>
+                                                <Text style={styles.modalValue}>{selectedOrder.customer.id}</Text>
+                                            </View>
+                                            <View style={styles.modalInfoRow}>
+                                                <Text style={styles.modalLabel}>Phone:</Text>
+                                                <Text style={styles.modalValue}>{selectedOrder.customer.phone}</Text>
+                                            </View>
+                                        </View>
+                                    ) : (
+                                        <Text style={{ color: COLORS.sub, fontStyle: 'italic', marginBottom: 10 }}>Guest Order</Text>
+                                    )}
+
                                     <View style={styles.modalDivider} />
                                     <Text style={styles.modalSectionTitle}>ITEMS</Text>
-                                    {selectedOrder.items.map((it, i) => (
-                                        <View key={i} style={styles.modalItemRow}>
-                                            <View style={{ flex: 1 }}>
-                                                <Text style={styles.modalItemName}>{it.name}</Text>
-                                                <Text style={styles.modalItemSub}>{it.counter}</Text>
+                                    {selectedOrder.items.map((it, i) => {
+                                        const isRevealed = selectedOrder.revealedCounters?.includes(it.counter);
+                                        return (
+                                            <View key={i} style={styles.modalItemRow}>
+                                                <View style={{ flex: 1 }}>
+                                                    <Text style={styles.modalItemName}>{it.name}</Text>
+                                                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                                                        <Text style={styles.modalItemSub}>{it.counter}</Text>
+                                                        {isRevealed && (
+                                                            <Ionicons name="checkmark-circle" size={14} color={COLORS.green} />
+                                                        )}
+                                                    </View>
+                                                </View>
+                                                <Text style={styles.modalItemQty}>x{it.qty}</Text>
+                                                <Text style={styles.modalItemPrice}>₹{it.price * it.qty}</Text>
                                             </View>
-                                            <Text style={styles.modalItemQty}>x{it.qty}</Text>
-                                            <Text style={styles.modalItemPrice}>₹{it.price * it.qty}</Text>
-                                        </View>
-                                    ))}
+                                        );
+                                    })}
                                     <View style={styles.modalDivider} />
                                     <View style={styles.modalTotalRow}><Text style={styles.modalTotalLabel}>Total:</Text><Text style={styles.modalTotalValue}>₹{selectedOrder.total}</Text></View>
                                 </ScrollView>
@@ -350,5 +387,11 @@ const styles = StyleSheet.create({
     modalItemPrice: { fontWeight: '700', width: 60, textAlign: 'right' },
     modalTotalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 10 },
     modalTotalLabel: { fontSize: 18, fontWeight: '800' },
-    modalTotalValue: { fontSize: 24, fontWeight: '900' }
+    modalTotalValue: { fontSize: 24, fontWeight: '900' },
+    customerDetailBox: {
+        backgroundColor: COLORS.lightGrey,
+        padding: 12,
+        borderRadius: 12,
+        marginBottom: 5
+    }
 });

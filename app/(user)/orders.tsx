@@ -1,20 +1,58 @@
 import React, { useState } from 'react';
-import { View, Text, FlatList, StyleSheet, ImageBackground, Modal, Pressable, ScrollView } from 'react-native';
-import { useQuery } from '@tanstack/react-query';
-import { getMyOrders, Order } from '@/api/orders';
+import { View, Text, FlatList, StyleSheet, ImageBackground, Modal, Pressable, ScrollView, ActivityIndicator } from 'react-native';
+import { router } from 'expo-router';
+import { getMyOrders, Order, docToOrder } from '@/api/orders';
 import { useAuthStore } from '@/stores/authStore';
 import { Ionicons } from '@expo/vector-icons';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { db } from '@/config/firebase';
+import { useEffect } from 'react';
 
 const ORANGE = '#f97316';
 
 export default function Orders() {
-    const phone = useAuthStore((s) => s.phone);
-    const { data = [] } = useQuery({
-        queryKey: ['orders', phone],
-        queryFn: () => getMyOrders(phone)
-    });
+    const user = useAuthStore((s) => s.user);
+    const [orders, setOrders] = useState<Order[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        if (!user?.uid) {
+            const authState = useAuthStore.getState();
+            if (!authState.isLoading && !authState.user) {
+                setLoading(false);
+            }
+            return;
+        }
+
+        const q = query(
+            collection(db, 'orders'),
+            where('userId', '==', user.uid)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const list: Order[] = [];
+            snapshot.forEach((doc) => {
+                list.push(docToOrder(doc.data(), doc.id));
+            });
+            // Sort by createdAt desc
+            list.sort((a, b) => b.createdAt - a.createdAt);
+            setOrders(list);
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, [user?.uid]);
 
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
+
+    if (loading) {
+        return (
+            <View style={styles.centered}>
+                <ActivityIndicator size="large" color={ORANGE} />
+                <Text style={styles.loadingText}>Fetching your orders...</Text>
+            </View>
+        );
+    }
 
     const formatDate = (ts: number) => {
         const d = new Date(ts);
@@ -36,9 +74,11 @@ export default function Orders() {
                         <Text style={styles.orderCode}>Code: {item.orderCode}</Text>
                     )}
                 </View>
-                <View style={[styles.badge, { backgroundColor: '#dcfce7' }]}>
-                    <Text style={[styles.badgeText, { color: '#166534' }]}>{item.status}</Text>
-                </View>
+                {item.status !== 'pending' && (
+                    <View style={[styles.badge, { backgroundColor: '#dcfce7' }]}>
+                        <Text style={[styles.badgeText, { color: '#166534' }]}>{item.status}</Text>
+                    </View>
+                )}
             </View>
             <View style={styles.divider} />
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
@@ -64,7 +104,7 @@ export default function Orders() {
 
             <FlatList
                 contentContainerStyle={{ padding: 16, paddingTop: 120, paddingBottom: 120 }}
-                data={data}
+                data={orders}
                 keyExtractor={(o) => String(o.id)}
                 renderItem={renderItem}
                 ListEmptyComponent={
@@ -130,6 +170,19 @@ export default function Orders() {
                                     <Text style={styles.totalLabel}>Total Paid</Text>
                                     <Text style={styles.totalValue}>₹{selectedOrder.total}</Text>
                                 </View>
+
+                                {selectedOrder.status === 'completed' && (
+                                    <Pressable
+                                        style={styles.scratchCardBtn}
+                                        onPress={() => {
+                                            setSelectedOrder(null);
+                                            router.push({ pathname: '/(user)/scratch-cards', params: { orderId: selectedOrder.id } });
+                                        }}
+                                    >
+                                        <Ionicons name="gift-outline" size={20} color="#fff" />
+                                        <Text style={styles.scratchCardBtnText}>Collect Order (Scratch Cards)</Text>
+                                    </Pressable>
+                                )}
                             </ScrollView>
                         )}
                     </View>
@@ -141,6 +194,8 @@ export default function Orders() {
 
 const styles = StyleSheet.create({
     container: { flex: 1 },
+    centered: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f8fafc' },
+    loadingText: { marginTop: 15, color: '#64748b', fontWeight: '600' },
     header: {
         position: 'absolute',
         top: 0,
@@ -289,5 +344,26 @@ const styles = StyleSheet.create({
         fontSize: 24,
         fontWeight: '900',
         color: '#111827',
+    },
+    scratchCardBtn: {
+        backgroundColor: ORANGE,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        paddingVertical: 16,
+        borderRadius: 16,
+        gap: 8,
+        marginTop: 10,
+        marginBottom: 30,
+        shadowColor: ORANGE,
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 6,
+    },
+    scratchCardBtnText: {
+        color: '#fff',
+        fontSize: 16,
+        fontWeight: '800',
     }
 });

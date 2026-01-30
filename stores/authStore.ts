@@ -131,6 +131,7 @@ export const useAuthStore = create<State & Actions>((set, get) => ({
           displayName: data?.displayName || user.displayName || undefined,
           photoURL: user.photoURL || undefined,
           role: (data?.userType as Role) || 'user',
+          phone: data?.phoneNumber || undefined,
           isLoading: false,
         });
       } catch (error) {

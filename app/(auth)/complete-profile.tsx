@@ -9,17 +9,19 @@ import { Ionicons } from '@expo/vector-icons';
 const db = getFirestore();
 const ORANGE = '#f97316';
 
-type UserType = 'student' | 'others';
+type UserType = 'student' | 'teacher' | 'others';
 
 export default function CompleteProfile() {
   const [userType, setUserType] = useState<UserType | null>(null);
   const [loading, setLoading] = useState(false);
   const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
 
   // Form States
   const [name, setName] = useState(user?.displayName || '');
   const [phone, setPhone] = useState('');
   const [admissionNumber, setAdmissionNumber] = useState('');
+  const [teacherId, setTeacherId] = useState('');
 
   const validatePhone = (num: string) => {
     return /^\d{10}$/.test(num);
@@ -54,8 +56,47 @@ export default function CompleteProfile() {
       return;
     }
 
+    if (userType === 'teacher' && !teacherId.trim()) {
+      Alert.alert('Required', 'Please enter your Teacher ID.');
+      return;
+    }
+
     try {
       setLoading(true);
+
+      // Check for unique phone number
+      const { collection, query, where, getDocs } = require('firebase/firestore');
+      const phoneQuery = query(collection(db, 'users'), where('phoneNumber', '==', phone));
+      const phoneSnap = await getDocs(phoneQuery);
+
+      let isPhoneTaken = false;
+      phoneSnap.forEach((d: any) => {
+        if (d.id !== user.uid) isPhoneTaken = true;
+      });
+
+      if (isPhoneTaken) {
+        Alert.alert('Phone Number Taken', 'This phone number is already registered with another account.');
+        setLoading(false);
+        return;
+      }
+
+      // Check for unique admission number (Student only)
+      if (userType === 'student' && admissionNumber) {
+        const admissionQuery = query(collection(db, 'users'), where('admissionNumber', '==', admissionNumber));
+        const admissionSnap = await getDocs(admissionQuery);
+
+        let isAdmissionTaken = false;
+        admissionSnap.forEach((d: any) => {
+          if (d.id !== user.uid) isAdmissionTaken = true;
+        });
+
+        if (isAdmissionTaken) {
+          Alert.alert('ID Already Taken', 'This Admission Number is already registered with another account.');
+          setLoading(false);
+          return;
+        }
+      }
+
       const userData: any = {
         uid: user.uid,
         email: user.email,
@@ -68,6 +109,7 @@ export default function CompleteProfile() {
 
 
       if (userType === 'student') userData.admissionNumber = admissionNumber;
+      if (userType === 'teacher') userData.teacherId = teacherId;
 
       await setDoc(doc(db, 'users', user.uid), userData);
 
@@ -91,6 +133,15 @@ export default function CompleteProfile() {
   return (
     <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
       <View style={styles.header}>
+        <Pressable
+          onPress={async () => {
+            await logout();
+            router.replace('/(auth)/login');
+          }}
+          style={styles.backBtn}
+        >
+          <Ionicons name="arrow-back" size={24} color="#111827" />
+        </Pressable>
         <Text style={styles.title}>Complete Your Profile</Text>
         <Text style={styles.subtitle}>Please tell us a bit more about yourself</Text>
       </View>
@@ -104,6 +155,12 @@ export default function CompleteProfile() {
             onPress={() => setUserType('student')}
             label="Student"
             icon="school-outline"
+          />
+          <TypeButton
+            selected={userType === 'teacher'}
+            onPress={() => setUserType('teacher')}
+            label="Teacher"
+            icon="briefcase-outline"
           />
           <TypeButton
             selected={userType === 'others'}
@@ -156,6 +213,21 @@ export default function CompleteProfile() {
               </>
             )}
 
+            {userType === 'teacher' && (
+              <>
+                <Text style={styles.inputLabel}>Teacher ID</Text>
+                <View style={styles.inputWrapper}>
+                  <Ionicons name="card-outline" size={20} color="#6b7280" style={styles.inputIcon} />
+                  <TextInput
+                    style={styles.input}
+                    value={teacherId}
+                    onChangeText={setTeacherId}
+                    placeholder="Enter Teacher ID"
+                  />
+                </View>
+              </>
+            )}
+
             <Pressable
               style={[styles.submitButton, loading && styles.submitButtonDisabled]}
               onPress={handleSubmit}
@@ -193,6 +265,18 @@ const styles = StyleSheet.create({
   },
   header: {
     marginBottom: 30,
+    position: 'relative',
+    paddingTop: 10,
+  },
+  backBtn: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    width: 44,
+    height: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 10,
   },
   title: {
     fontSize: 28,

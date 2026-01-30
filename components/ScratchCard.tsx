@@ -17,30 +17,35 @@ interface ScratchCardProps {
 export const ScratchCard = ({ counter, isUsed, isExpired, revealedAt, items, onReveal }: ScratchCardProps) => {
     const [revealed, setRevealed] = useState(!!revealedAt);
     const [scratchProgress, setScratchProgress] = useState(0);
+    const progressRef = useRef(0); // Use ref to avoid stale closure in PanResponder
+
     const [phase, setPhase] = useState<'visible' | 'faded' | 'hidden'>(() => {
         if (!revealedAt) return 'visible';
-        const revealedTime = revealedAt.toMillis ? revealedAt.toMillis() : (revealedAt as any);
+        const revealedTime = (revealedAt as any).toMillis ? (revealedAt as any).toMillis() : (revealedAt as any);
+        if (isNaN(revealedTime)) return 'visible';
         const age = Date.now() - revealedTime;
-        if (age > 2 * 60 * 1000) return 'hidden';
-        if (age > 60 * 1000) return 'faded';
+        if (age > 5 * 60 * 1000) return 'hidden'; // Hide after 5m
+        if (age > 1.5 * 60 * 1000) return 'faded'; // Fade after 1m 30s
         return 'visible';
     });
 
     const opacity = useRef(new Animated.Value(!!revealedAt ? 0 : 1)).current;
     const scale = useRef(new Animated.Value(1)).current;
-    const shake = useRef(new Animated.Value(0)).current; // For localized animation feedback
+    const shake = useRef(new Animated.Value(0)).current;
 
     // Timer to update the phase based on revealedAt
     useEffect(() => {
         if (!revealedAt) return;
 
         const updatePhase = () => {
-            const revealedTime = revealedAt.toMillis ? revealedAt.toMillis() : (revealedAt as any);
+            const revealedTime = (revealedAt as any).toMillis ? (revealedAt as any).toMillis() : (revealedAt as any);
+            if (isNaN(revealedTime)) return;
+
             const age = Date.now() - revealedTime;
 
-            if (age > 2 * 60 * 1000) {
+            if (age > 5 * 60 * 1000) {
                 setPhase('hidden');
-            } else if (age > 60 * 1000) {
+            } else if (age > 1.5 * 60 * 1000) {
                 setPhase('faded');
             } else {
                 setPhase('visible');
@@ -48,31 +53,34 @@ export const ScratchCard = ({ counter, isUsed, isExpired, revealedAt, items, onR
         };
 
         updatePhase();
-        const interval = setInterval(updatePhase, 2000);
+        const interval = setInterval(updatePhase, 5000);
         return () => clearInterval(interval);
     }, [revealedAt]);
 
     const handleScratch = (gestureState: any) => {
         if (revealed || isUsed || isExpired) return;
 
-        // Calculate 'velocity' for a more responsive feel
         const velocity = Math.sqrt(gestureState.vx ** 2 + gestureState.vy ** 2);
-        const distance = Math.sqrt(gestureState.dx ** 2 + gestureState.dy ** 2);
 
-        // Fluid progress increment
-        const increment = (distance / 400) + (velocity * 0.02);
-        const newProgress = Math.min(scratchProgress + increment, 1);
+        // Use instantaneous movement magnitude if possible, but PanResponder gives accumulated dx/dy.
+        // Better approach: just accumulate a small amount per move event or use distance.
+        // Issue with distance: it resets on new gesture.
+        // We want to add to existing progress.
 
+        // Simplified Logic: Just add a small amount for every move event based on velocity
+        // But onPanResponderMove fires a lot. 
+
+        // Let's rely on the fact that we're using a ref now, so we can accumulate properly.
+        // We'll approximate "amount scratched" by velocity.
+
+        const scratchFactor = 0.005 + (velocity * 0.005);
+        const newProgress = Math.min(progressRef.current + scratchFactor, 1);
+
+        progressRef.current = newProgress;
         setScratchProgress(newProgress);
         opacity.setValue(1 - newProgress);
 
-        // Subtle micro-animation during scratch
-        Animated.sequence([
-            Animated.timing(shake, { toValue: 1, duration: 50, useNativeDriver: true }),
-            Animated.timing(shake, { toValue: 0, duration: 50, useNativeDriver: true }),
-        ]).start();
-
-        if (newProgress >= 0.35) { // Slightly lower threshold for 'fluid' feel
+        if (newProgress >= 0.4) {
             triggerReveal();
         }
     };
@@ -91,9 +99,18 @@ export const ScratchCard = ({ counter, isUsed, isExpired, revealedAt, items, onR
         });
     };
 
+    // Recreate PanResponder if needed or just use ref. 
+    // Since we use progressRef inside handleScratch, the closure staleness is avoided for the value.
+    // However, handleScratch itself is inside the component. 
+    // The PanResponder callback calls the *latest* handleScratch if we update it, 
+    // OR we can make PanResponder use a ref to the handler.
+
+    // Easier fix: Use useRef for the PanResponder and don't recreate it, 
+    // but ensure handleScratch uses refs for all mutable state it needs.
     const panResponder = useRef(
         PanResponder.create({
-            onStartShouldSetPanResponder: () => !revealed && !isUsed && !isExpired,
+            onStartShouldSetPanResponder: () => true,
+            onMoveShouldSetPanResponder: () => true,
             onPanResponderMove: (evt, gestureState) => handleScratch(gestureState),
         })
     ).current;

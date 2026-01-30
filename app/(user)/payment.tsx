@@ -180,10 +180,13 @@ export default function Payment() {
   const isGuest = useAuthStore((s) => s.isGuest);
   const phone = useAuthStore((s) => s.phone);
   const [selectedPayment, setSelectedPayment] = useState<'card' | 'upi' | 'cod'>('card');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const spend = useWalletStore((s) => s.spend);
   const canteenOpen = useCanteenStore((s) => s.open);
 
   const handleCheckout = async () => {
+    if (isSubmitting) return;
+
     if (isGuest()) {
       router.push('/(auth)/login');
       return;
@@ -194,24 +197,34 @@ export default function Payment() {
       return;
     }
 
-    const amount = total();
-    // For non-COD payments, attempt to use wallet balance
-    if (selectedPayment !== 'cod') {
-      const ok = spend(amount);
-      if (!ok) {
-        Alert.alert('Insufficient Balance', 'Your wallet balance is not enough to complete this payment.');
-        return;
+    setIsSubmitting(true);
+
+    try {
+      const amount = total();
+      // For non-COD payments, attempt to use wallet balance
+      if (selectedPayment !== 'cod') {
+        const ok = spend(amount);
+        if (!ok) {
+          Alert.alert('Insufficient Balance', 'Your wallet balance is not enough to complete this payment.');
+          setIsSubmitting(false);
+          return;
+        }
       }
+
+      const user = useAuthStore.getState().user;
+      const order = await createOrder(items, selectedPayment, user?.uid || 'unknown');
+      clear();
+
+      // Auto-navigate to Scratch Cards page after successful "payment"
+      router.replace({
+        pathname: '/(user)/scratch-cards',
+        params: { orderId: order.id.toString() }
+      });
+    } catch (error) {
+      console.error('Checkout error:', error);
+      Alert.alert('Error', 'Failed to place order. Please try again.');
+      setIsSubmitting(false);
     }
-
-    const order = await createOrder(items, selectedPayment, phone || 'unknown');
-    clear();
-
-    // Auto-navigate to Scratch Cards page after successful "payment"
-    router.replace({
-      pathname: '/(user)/scratch-cards',
-      params: { orderId: order.id.toString() }
-    });
   };
 
   return (
@@ -222,7 +235,7 @@ export default function Payment() {
     >
       {/* Header */}
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.backButton}>
+        <Pressable onPress={() => !isSubmitting && router.back()} style={styles.backButton}>
           <Text style={styles.backButtonText}>{"<"}</Text>
         </Pressable>
         <Text style={styles.headerTitle}>Payment</Text>
@@ -241,6 +254,7 @@ export default function Payment() {
           <Pressable
             onPress={() => setSelectedPayment('card')}
             style={styles.paymentOption}
+            disabled={isSubmitting}
           >
             <View style={[styles.paymentIcon, { backgroundColor: selectedPayment === 'card' ? GREEN : '#f0f0f0' }]}>
               {selectedPayment === 'card' ? (
@@ -258,6 +272,7 @@ export default function Payment() {
           <Pressable
             onPress={() => setSelectedPayment('upi')}
             style={styles.paymentOption}
+            disabled={isSubmitting}
           >
             <View style={[styles.paymentIcon, { backgroundColor: selectedPayment === 'upi' ? ORANGE : '#f0f0f0' }]}>
               <Text style={[styles.paymentIconText, { color: selectedPayment === 'upi' ? '#fff' : '#111827' }]}>A</Text>
@@ -271,6 +286,7 @@ export default function Payment() {
           <Pressable
             onPress={() => setSelectedPayment('cod')}
             style={styles.paymentOption}
+            disabled={isSubmitting}
           >
             <View style={[styles.paymentIcon, { backgroundColor: selectedPayment === 'cod' ? ORANGE : '#f0f0f0' }]}>
               <Text style={[styles.paymentIconText, { color: selectedPayment === 'cod' ? '#fff' : '#111827' }]}>💰</Text>
@@ -291,15 +307,15 @@ export default function Payment() {
       <View style={styles.checkoutBar}>
         <Pressable
           onPress={handleCheckout}
-          disabled={!canteenOpen}
+          disabled={!canteenOpen || isSubmitting}
           style={({ pressed }) => [
             styles.checkoutBtn,
-            !canteenOpen && { backgroundColor: '#6b7280' },
+            (!canteenOpen || isSubmitting) && { backgroundColor: '#6b7280' },
             pressed && { opacity: 0.9 }
           ]}
         >
           <Text style={styles.checkoutText}>
-            {canteenOpen ? 'Proceed to Checkout' : 'Canteen Closed'}
+            {isSubmitting ? 'Processing...' : (canteenOpen ? 'Proceed to Checkout' : 'Canteen Closed')}
           </Text>
         </Pressable>
       </View>
