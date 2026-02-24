@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, Pressable, StyleSheet, ImageBackground, ScrollView, Alert } from 'react-native';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useCartStore } from '@/stores/cartStore';
 import { createOrder } from '@/api/orders';
 import { useAuthStore } from '@/stores/authStore';
@@ -179,10 +179,20 @@ export default function Payment() {
   const clear = useCartStore((s) => s.clear);
   const isGuest = useAuthStore((s) => s.isGuest);
   const phone = useAuthStore((s) => s.phone);
-  const [selectedPayment, setSelectedPayment] = useState<'card' | 'upi' | 'cod'>('card');
+  const [selectedPayment, setSelectedPayment] = useState<'upi' | 'cod'>('upi');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showUPIMockup, setShowUPIMockup] = useState(false);
   const spend = useWalletStore((s) => s.spend);
   const canteenOpen = useCanteenStore((s) => s.open);
+
+  // Reset state on focus to prevent "Processing" lock on subsequent orders
+  useFocusEffect(
+    React.useCallback(() => {
+      setIsSubmitting(false);
+      setShowUPIMockup(false);
+      setSelectedPayment('upi');
+    }, [])
+  );
 
   const handleCheckout = async () => {
     if (isSubmitting) return;
@@ -194,6 +204,11 @@ export default function Payment() {
 
     if (!canteenOpen) {
       Alert.alert('Canteen Closed', 'Ordering is unavailable while the canteen is closed.');
+      return;
+    }
+
+    if (selectedPayment === 'upi') {
+      setShowUPIMockup(true);
       return;
     }
 
@@ -213,6 +228,9 @@ export default function Payment() {
 
       const user = useAuthStore.getState().user;
       const order = await createOrder(items, selectedPayment, user?.uid || 'unknown');
+
+      // Reset submitting BEFORE navigating to avoid state persistence issues
+      setIsSubmitting(false);
       clear();
 
       // Auto-navigate to Scratch Cards page after successful "payment"
@@ -251,23 +269,7 @@ export default function Payment() {
         </View>
 
         <View style={styles.paymentOptions}>
-          <Pressable
-            onPress={() => setSelectedPayment('card')}
-            style={styles.paymentOption}
-            disabled={isSubmitting}
-          >
-            <View style={[styles.paymentIcon, { backgroundColor: selectedPayment === 'card' ? GREEN : '#f0f0f0' }]}>
-              {selectedPayment === 'card' ? (
-                <Text style={[styles.paymentIconCheck, { color: '#fff' }]}>✓</Text>
-              ) : (
-                <Text style={styles.paymentIconText}>💳</Text>
-              )}
-            </View>
-            <View style={styles.paymentInfo}>
-              <Text style={styles.paymentTitle}>Credit / Debit Card</Text>
-            </View>
-            <Text style={styles.paymentArrow}>›</Text>
-          </Pressable>
+
 
           <Pressable
             onPress={() => setSelectedPayment('upi')}
@@ -319,6 +321,59 @@ export default function Payment() {
           </Text>
         </Pressable>
       </View>
+
+      {/* UPI Mockup Overlay */}
+      {showUPIMockup && (
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: '#fff', zIndex: 1000, padding: 20, justifyContent: 'center', alignItems: 'center' }]}>
+          <View style={{ width: '100%', alignItems: 'center', gap: 20 }}>
+            <View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#f0f9ff', justifyContent: 'center', alignItems: 'center' }}>
+              <Text style={{ fontSize: 40 }}>📱</Text>
+            </View>
+            <Text style={{ fontSize: 24, fontWeight: '800', color: '#111827' }}>UPI Payment</Text>
+            <Text style={{ fontSize: 16, color: '#64748b', textAlign: 'center', paddingHorizontal: 40 }}>
+              Simulating connection to your UPI App...
+            </Text>
+
+            <View style={{ width: '100%', backgroundColor: '#f8fafc', padding: 20, borderRadius: 20, gap: 12 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ color: '#64748b', fontWeight: '600' }}>Amount</Text>
+                <Text style={{ color: '#111827', fontWeight: '800' }}>₹{total()}</Text>
+              </View>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Text style={{ color: '#64748b', fontWeight: '600' }}>Payee</Text>
+                <Text style={{ color: '#111827', fontWeight: '800' }}>QuickBite Canteen</Text>
+              </View>
+            </View>
+
+            <Pressable
+              onPress={async () => {
+                setIsSubmitting(true);
+                setShowUPIMockup(false);
+                try {
+                  const user = useAuthStore.getState().user;
+                  const order = await createOrder(items, 'upi', user?.uid || 'unknown');
+                  setIsSubmitting(false);
+                  clear();
+                  router.replace({
+                    pathname: '/(user)/scratch-cards',
+                    params: { orderId: order.id.toString() }
+                  });
+                } catch (e) {
+                  Alert.alert('Error', 'Payment failed simulation.');
+                  setIsSubmitting(false);
+                }
+              }}
+              style={{ backgroundColor: GREEN, width: '100%', paddingVertical: 18, borderRadius: 16, alignItems: 'center', marginTop: 20 }}
+            >
+              <Text style={{ color: '#fff', fontWeight: '800', fontSize: 18 }}>Pay Now (Mockup)</Text>
+            </Pressable>
+
+            <Pressable onPress={() => setShowUPIMockup(false)} style={{ marginTop: 10 }}>
+              <Text style={{ color: '#ef4444', fontWeight: '700' }}>Cancel Payment</Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
     </ImageBackground>
   );
 }

@@ -153,7 +153,7 @@ export default function ScratchCardsPage() {
                 <View style={styles.infoBox}>
                     <Ionicons name="shield-checkmark" size={20} color={ORANGE} />
                     <Text style={styles.infoText}>
-                        Visible only for 1 minute after scratch. Show this to staff immediately.
+                        Visible only for 1m 10s after scratch. Show this to staff immediately.
                     </Text>
                 </View>
 

@@ -28,13 +28,15 @@ export async function getCanteenStatus() {
       const data = statusSnap.data();
       return { open: data.open ?? true };
     } else {
-      // Initialize with default value
-      await setDoc(statusRef, { open: true });
+      // Return default value if document doesn't exist
+      // We don't initialize it here to avoid permission errors for users
       return { open: true };
     }
-  } catch (error) {
+  } catch (error: any) {
+    // If we get a permission error or any other fetch error, default to open
+    // and log the error for debugging
     console.error('Error fetching canteen status:', error);
-    return { open: true }; // Default to open on error
+    return { open: true };
   }
 }
 

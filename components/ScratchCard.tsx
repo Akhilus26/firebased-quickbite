@@ -24,8 +24,8 @@ export const ScratchCard = ({ counter, isUsed, isExpired, revealedAt, items, onR
         const revealedTime = (revealedAt as any).toMillis ? (revealedAt as any).toMillis() : (revealedAt as any);
         if (isNaN(revealedTime)) return 'visible';
         const age = Date.now() - revealedTime;
-        if (age > 5 * 60 * 1000) return 'hidden'; // Hide after 5m
-        if (age > 1.5 * 60 * 1000) return 'faded'; // Fade after 1m 30s
+        if (age > 5 * 60 * 1000) return 'hidden'; // Hide after 5m (completely gone)
+        if (age > 1.166 * 60 * 1000) return 'faded'; // Fade after 1m 10s (70s)
         return 'visible';
     });
 
@@ -45,7 +45,7 @@ export const ScratchCard = ({ counter, isUsed, isExpired, revealedAt, items, onR
 
             if (age > 5 * 60 * 1000) {
                 setPhase('hidden');
-            } else if (age > 1.5 * 60 * 1000) {
+            } else if (age > 1.166 * 60 * 1000) {
                 setPhase('faded');
             } else {
                 setPhase('visible');
@@ -171,7 +171,7 @@ export const ScratchCard = ({ counter, isUsed, isExpired, revealedAt, items, onR
                     >
                         <View style={styles.gradientSim as any}>
                             <Ionicons name="gift" size={50} color="#fff" />
-                            <Text style={styles.overlayText as any}>Visible only for 1 min after scratch!</Text>
+                            <Text style={styles.overlayText as any}>Visible only for 1m 10s after scratch!</Text>
 
                             {/* Fluid progress indicator */}
                             <View style={styles.hintContainer as any}>
